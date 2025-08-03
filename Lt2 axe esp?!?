@@ -1,42 +1,74 @@
--- Axe Highlight Script for Lumber Tycoon 2
+-- Axe ESP & Highlighter Script for Lumber Tycoon 2
+-- Compatible with Delta Executor
+-- Author: ChatGPT
 
 -- Settings
-local highlightColor = Color3.fromRGB(0, 255, 0) -- Green
-local refreshInterval = 2 -- seconds
+local boxColor = Color3.fromRGB(0, 255, 0) -- Green box
+local textColor = Color3.fromRGB(255, 255, 255) -- White text
+local boxTransparency = 0.3
+local fontSize = 13
 
--- Function to check if a tool is an axe
-local function isAxe(tool)
-    if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
-        local name = tool.Name:lower()
-        return name:find("axe") ~= nil
+-- Function to add Box + ESP Text
+local function highlightAxe(tool)
+    local handle = tool:FindFirstChild("Handle")
+    local toolName = tool:FindFirstChild("ToolName")
+
+    if handle and toolName and not tool:FindFirstChild("AxeESP") then
+        -- Box Adornment
+        local box = Instance.new("BoxHandleAdornment")
+        box.Name = "AxeESP"
+        box.Adornee = handle
+        box.AlwaysOnTop = true
+        box.ZIndex = 5
+        box.Size = handle.Size + Vector3.new(0.2, 0.2, 0.2)
+        box.Transparency = boxTransparency
+        box.Color3 = boxColor
+        box.Parent = tool
+
+        -- Billboard GUI with Text
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "AxeESP"
+        billboard.Adornee = handle
+        billboard.Size = UDim2.new(0, 100, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 1.5, 0)
+        billboard.AlwaysOnTop = true
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = toolName.Value
+        label.TextColor3 = textColor
+        label.TextStrokeTransparency = 0
+        label.Font = Enum.Font.SourceSansBold
+        label.TextScaled = true
+        label.Parent = billboard
+
+        billboard.Parent = tool
     end
-    return false
 end
 
--- Function to highlight a part
-local function highlightPart(part)
-    if not part:FindFirstChild("AxeHighlight") then
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "AxeHighlight"
-        highlight.FillColor = highlightColor
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.Parent = part
-    end
-end
-
--- Function to scan and highlight all visible axes
-local function highlightAxes()
-    for _, v in pairs(workspace:GetDescendants()) do
-        if isAxe(v) then
-            highlightPart(v.Handle)
+-- Function to check and highlight all axes
+local function scanAxes()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Tool") and obj:FindFirstChild("Handle") and obj:FindFirstChild("ToolName") then
+            if string.find(obj.ToolName.Value:lower(), "axe") then
+                highlightAxe(obj)
+            end
         end
     end
 end
 
--- Loop to refresh highlights periodically
-while true do
-    pcall(function()
-        highlightAxes()
-    end)
-    wait(refreshInterval)
-end
+-- Initial scan
+scanAxes()
+
+-- Detect future axes
+workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Tool") then
+        task.wait(0.1)
+        if obj:FindFirstChild("Handle") and obj:FindFirstChild("ToolName") then
+            if string.find(obj.ToolName.Value:lower(), "axe") then
+                highlightAxe(obj)
+            end
+        end
+    end
+end)
