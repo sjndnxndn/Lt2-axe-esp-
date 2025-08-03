@@ -1,0 +1,29 @@
+-- LocalScript placed in StarterPlayerScripts
+local highlightColor = Color3.fromRGB(255, 255, 0) -- Yellow
+
+-- Function to apply highlight to axes
+local function highlightAxes()
+    for _, item in pairs(workspace:GetDescendants()) do
+        if item:IsA("Tool") and item.Name:lower():find("axe") then
+            -- Add Highlight if not already present
+            if not item:FindFirstChild("Highlight") then
+                local hl = Instance.new("Highlight")
+                hl.Adornee = item
+                hl.FillColor = highlightColor
+                hl.OutlineColor = Color3.new(0, 0, 0)
+                hl.OutlineTransparency = 0
+                hl.FillTransparency = 0.3
+                hl.Parent = item
+            end
+        end
+    end
+end
+
+-- Run once at start
+highlightAxes()
+
+-- Optional: re-run periodically to catch new axes
+while true do
+    task.wait(5)
+    highlightAxes()
+end
