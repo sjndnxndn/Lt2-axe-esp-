@@ -1,74 +1,86 @@
--- Axe ESP & Highlighter Script for Lumber Tycoon 2
--- Compatible with Delta Executor
--- Author: ChatGPT
+-- Full Axe ESP Script for Lumber Tycoon 2
+-- Shows ESP for both held and dropped axes
+-- Works in Delta Executor
+-- Educational use only
 
--- Settings
-local boxColor = Color3.fromRGB(0, 255, 0) -- Green box
-local textColor = Color3.fromRGB(255, 255, 255) -- White text
-local boxTransparency = 0.3
-local fontSize = 13
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+local RunService = game:GetService("RunService")
 
--- Function to add Box + ESP Text
-local function highlightAxe(tool)
-    local handle = tool:FindFirstChild("Handle")
-    local toolName = tool:FindFirstChild("ToolName")
+local AXE_COLOR = Color3.fromRGB(255, 215, 0)
+local TEXT_SIZE = 16
 
-    if handle and toolName and not tool:FindFirstChild("AxeESP") then
-        -- Box Adornment
-        local box = Instance.new("BoxHandleAdornment")
-        box.Name = "AxeESP"
-        box.Adornee = handle
-        box.AlwaysOnTop = true
-        box.ZIndex = 5
-        box.Size = handle.Size + Vector3.new(0.2, 0.2, 0.2)
-        box.Transparency = boxTransparency
-        box.Color3 = boxColor
-        box.Parent = tool
+-- Table to hold ESP data
+local espData = {}
 
-        -- Billboard GUI with Text
-        local billboard = Instance.new("BillboardGui")
-        billboard.Name = "AxeESP"
-        billboard.Adornee = handle
-        billboard.Size = UDim2.new(0, 100, 0, 40)
-        billboard.StudsOffset = Vector3.new(0, 1.5, 0)
-        billboard.AlwaysOnTop = true
+-- Helper: Create a Drawing text label
+local function createESPText()
+    local text = Drawing.new("Text")
+    text.Size = TEXT_SIZE
+    text.Center = true
+    text.Outline = true
+    text.Color = AXE_COLOR
+    text.Visible = false
+    return text
+end
 
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = toolName.Value
-        label.TextColor3 = textColor
-        label.TextStrokeTransparency = 0
-        label.Font = Enum.Font.SourceSansBold
-        label.TextScaled = true
-        label.Parent = billboard
+-- Helper: Determine if an instance is an axe (Tool or Model)
+local function isAxe(instance)
+    if instance:IsA("Tool") and instance.Name:lower():find("axe") then
+        return true
+    elseif instance:IsA("Model") and instance.Name:lower():find("axe") then
+        return true
+    end
+    return false
+end
 
-        billboard.Parent = tool
+-- Helper: Get the part to attach ESP to
+local function getESPPart(obj)
+    if obj:IsA("Tool") then
+        return obj:FindFirstChild("Handle")
+    elseif obj:IsA("Model") then
+        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
     end
 end
 
--- Function to check and highlight all axes
-local function scanAxes()
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("Tool") and obj:FindFirstChild("Handle") and obj:FindFirstChild("ToolName") then
-            if string.find(obj.ToolName.Value:lower(), "axe") then
-                highlightAxe(obj)
-            end
+-- Cleanup removed axes
+local function cleanupESP()
+    for obj, data in pairs(espData) do
+        if not obj:IsDescendantOf(game) then
+            if data.text then data.text:Remove() end
+            espData[obj] = nil
         end
     end
 end
 
--- Initial scan
-scanAxes()
+-- Main ESP loop
+RunService.RenderStepped:Connect(function()
+    cleanupESP()
 
--- Detect future axes
-workspace.DescendantAdded:Connect(function(obj)
-    if obj:IsA("Tool") then
-        task.wait(0.1)
-        if obj:FindFirstChild("Handle") and obj:FindFirstChild("ToolName") then
-            if string.find(obj.ToolName.Value:lower(), "axe") then
-                highlightAxe(obj)
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if isAxe(obj) and not espData[obj] then
+            local part = getESPPart(obj)
+            if part then
+                local text = createESPText()
+                espData[obj] = {part = part, text = text}
             end
+        end
+    end
+
+    for obj, data in pairs(espData) do
+        local part = data.part
+        if part and part:IsA("BasePart") and part:IsDescendantOf(Workspace) then
+            local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                data.text.Position = Vector2.new(pos.X, pos.Y)
+                data.text.Text = obj.Name
+                data.text.Visible = true
+            else
+                data.text.Visible = false
+            end
+        else
+            data.text.Visible = false
         end
     end
 end)
