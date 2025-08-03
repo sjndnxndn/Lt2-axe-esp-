@@ -1,29 +1,42 @@
--- LocalScript placed in StarterPlayerScripts
-local highlightColor = Color3.fromRGB(255, 255, 0) -- Yellow
+-- Axe Highlight Script for Lumber Tycoon 2
 
--- Function to apply highlight to axes
+-- Settings
+local highlightColor = Color3.fromRGB(0, 255, 0) -- Green
+local refreshInterval = 2 -- seconds
+
+-- Function to check if a tool is an axe
+local function isAxe(tool)
+    if tool:IsA("Tool") and tool:FindFirstChild("Handle") then
+        local name = tool.Name:lower()
+        return name:find("axe") ~= nil
+    end
+    return false
+end
+
+-- Function to highlight a part
+local function highlightPart(part)
+    if not part:FindFirstChild("AxeHighlight") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "AxeHighlight"
+        highlight.FillColor = highlightColor
+        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.Parent = part
+    end
+end
+
+-- Function to scan and highlight all visible axes
 local function highlightAxes()
-    for _, item in pairs(workspace:GetDescendants()) do
-        if item:IsA("Tool") and item.Name:lower():find("axe") then
-            -- Add Highlight if not already present
-            if not item:FindFirstChild("Highlight") then
-                local hl = Instance.new("Highlight")
-                hl.Adornee = item
-                hl.FillColor = highlightColor
-                hl.OutlineColor = Color3.new(0, 0, 0)
-                hl.OutlineTransparency = 0
-                hl.FillTransparency = 0.3
-                hl.Parent = item
-            end
+    for _, v in pairs(workspace:GetDescendants()) do
+        if isAxe(v) then
+            highlightPart(v.Handle)
         end
     end
 end
 
--- Run once at start
-highlightAxes()
-
--- Optional: re-run periodically to catch new axes
+-- Loop to refresh highlights periodically
 while true do
-    task.wait(5)
-    highlightAxes()
+    pcall(function()
+        highlightAxes()
+    end)
+    wait(refreshInterval)
 end
