@@ -1,110 +1,113 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Dropulix/Delta/main/Library.lua"))()
+local Window = Delta:CreateWindow("LT2 Axe Highlighter")
+local Tab = Window:CreateTab("ESP")
+local ToggleESP = Tab:CreateToggle("Enable Axe ESP", false, function(value)
+    getgenv().AxeESPEnabled = value
+end)
 
+--// Settings
+getgenv().AxeESPEnabled = true
+local RefreshKey = Enum.KeyCode.RightControl
+local AxeESP = {}
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
-local ESPEnabled = true
-local ESPObjects = {}
-local UpdateRate = 10 -- seconds
-
--- UI Toggle Setup
-local UserInputService = game:GetService("UserInputService")
-UserInputService.InputBegan:Connect(function(input, gp)
-    if input.KeyCode == Enum.KeyCode.RightControl and not gp then
-        ESPEnabled = not ESPEnabled
-        for _, v in pairs(ESPObjects) do
-            v.Visible = ESPEnabled
-        end
-    end
-end)
-
--- Create ESP Box
-local function createESP(name)
-    local esp = Drawing.new("Text")
-    esp.Size = 16
-    esp.Center = true
-    esp.Outline = true
-    esp.Color = Color3.fromRGB(0, 255, 0)
-    esp.Visible = ESPEnabled
-    esp.Text = name
-    return esp
-end
-
--- Clear old ESP
+--// Cleanup function
 local function clearESP()
-    for _, v in pairs(ESPObjects) do
-        if v and v.Remove then
-            v:Remove()
-        elseif v and v.Destroy then
-            v:Destroy()
-        end
+    for _, v in pairs(AxeESP) do
+        if v.Text then v.Text:Remove() end
     end
-    table.clear(ESPObjects)
+    AxeESP = {}
 end
 
--- Update ESP targets
-local function getAllAxes()
-    local found = {}
+--// Create 2D label
+local function createESP(object)
+    local drawing = Drawing.new("Text")
+    drawing.Size = 14
+    drawing.Center = true
+    drawing.Outline = true
+    drawing.Color = Color3.fromRGB(255, 255, 0)
+    drawing.Visible = true
+    drawing.Text = object.Name
+    drawing.Font = 2
 
-    -- World axes (not held)
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("Tool") and v:FindFirstChild("Axe") then
-            table.insert(found, v)
+    table.insert(AxeESP, {Object = object, Text = drawing})
+end
+
+--// Detect axes (Tools that contain "Axe" in name)
+local function isAxe(tool)
+    return tool:IsA("Tool") and string.find(tool.Name:lower(), "axe")
+end
+
+--// Scan for all axes in workspace and player inventory
+local function scanAxes()
+    clearESP()
+
+    -- Dropped axes in workspace
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if isAxe(obj) and not obj:FindFirstAncestorWhichIsA("Player") then
+            createESP(obj)
         end
     end
 
-    -- Held axes
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local tool = plr.Character:FindFirstChildOfClass("Tool")
-            if tool and tool:FindFirstChild("Axe") then
-                table.insert(found, tool)
+    -- Held axes (player's backpack/tool)
+    for _, player in pairs(Players:GetPlayers()) do
+        local char = player.Character
+        if char then
+            for _, item in pairs(char:GetChildren()) do
+                if isAxe(item) then
+                    createESP(item)
+                end
+            end
+        end
+
+        local bp = player:FindFirstChildOfClass("Backpack")
+        if bp then
+            for _, item in pairs(bp:GetChildren()) do
+                if isAxe(item) then
+                    createESP(item)
+                end
             end
         end
     end
-
-    return found
 end
 
--- Track and update ESP
-local function updateESP()
-    clearESP()
-    local axes = getAllAxes()
-    for _, axe in pairs(axes) do
-        local esp = createESP(axe.Name)
-        ESPObjects[axe] = esp
+--// Keybind for refresh
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == RefreshKey then
+        scanAxes()
     end
-end
+end)
 
--- Position ESP every frame
+--// Main render loop
 RunService.RenderStepped:Connect(function()
-    if not ESPEnabled then return end
-    for axe, esp in pairs(ESPObjects) do
-        if axe and axe:IsDescendantOf(game) and axe:FindFirstChild("Handle") then
-            local pos = axe.Handle.Position
-            local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(pos)
+    if not getgenv().AxeESPEnabled then
+        for _, v in pairs(AxeESP) do
+            if v.Text then v.Text.Visible = false end
+        end
+        return
+    end
+
+    for i, v in pairs(AxeESP) do
+        local obj = v.Object
+        local text = v.Text
+
+        if obj and obj:IsDescendantOf(game) and obj:IsA("BasePart") then
+            local pos, onScreen = Camera:WorldToViewportPoint(obj.Position)
             if onScreen then
-                esp.Position = Vector2.new(screenPos.X, screenPos.Y)
-                esp.Text = axe.Name
-                esp.Visible = true
+                text.Position = Vector2.new(pos.X, pos.Y)
+                text.Visible = true
+                text.Text = obj.Name
             else
-                esp.Visible = false
+                text.Visible = false
             end
         else
-            esp.Visible = false
+            text.Visible = false
         end
     end
 end)
 
--- Initial run
-updateESP()
-
--- Refresh every 10 seconds
-task.spawn(function()
-    while true do
-        task.wait(UpdateRate)
-        updateESP()
-    end
-end)
-
-print("✅ Axe ESP Script Loaded - Press Right Control to toggle")
+--// Initial scan
+scanAxes()
