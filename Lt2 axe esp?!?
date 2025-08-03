@@ -1,86 +1,78 @@
--- Full Axe ESP Script for Lumber Tycoon 2
--- Shows ESP for both held and dropped axes
--- Works in Delta Executor
--- Educational use only
+-- ESP table
+local espAxes = {}
+local runService = game:GetService("RunService")
+local camera = workspace.CurrentCamera
 
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
-local RunService = game:GetService("RunService")
-
-local AXE_COLOR = Color3.fromRGB(255, 215, 0)
-local TEXT_SIZE = 16
-
--- Table to hold ESP data
-local espData = {}
-
--- Helper: Create a Drawing text label
-local function createESPText()
-    local text = Drawing.new("Text")
-    text.Size = TEXT_SIZE
-    text.Center = true
-    text.Outline = true
-    text.Color = AXE_COLOR
-    text.Visible = false
-    return text
+-- Checks if a tool is an axe by name
+local function isAxe(tool)
+    return tool:IsA("Tool") and tool:FindFirstChild("Handle") and tool.Name:lower():find("axe")
 end
 
--- Helper: Determine if an instance is an axe (Tool or Model)
-local function isAxe(instance)
-    if instance:IsA("Tool") and instance.Name:lower():find("axe") then
-        return true
-    elseif instance:IsA("Model") and instance.Name:lower():find("axe") then
-        return true
+-- Clears existing ESP drawings
+local function clearESP()
+    for _, v in pairs(espAxes) do
+        if v.Text then v.Text:Remove() end
     end
-    return false
+    espAxes = {}
 end
 
--- Helper: Get the part to attach ESP to
-local function getESPPart(obj)
-    if obj:IsA("Tool") then
-        return obj:FindFirstChild("Handle")
-    elseif obj:IsA("Model") then
-        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-    end
+-- Adds 2D ESP for a given axe
+local function addESP(tool, isHeld)
+    local espText = Drawing.new("Text")
+    espText.Size = 13
+    espText.Center = true
+    espText.Outline = true
+    espText.Font = 2
+    espText.Color = isHeld and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(100, 255, 100)
+    espText.Text = (isHeld and "[Held] " or "") .. tool.Name
+    espText.Visible = true
+
+    espAxes[#espAxes + 1] = {
+        Tool = tool,
+        Text = espText,
+        Held = isHeld
+    }
 end
 
--- Cleanup removed axes
-local function cleanupESP()
-    for obj, data in pairs(espData) do
-        if not obj:IsDescendantOf(game) then
-            if data.text then data.text:Remove() end
-            espData[obj] = nil
+-- Main update function
+local function updateAxes()
+    clearESP()
+    -- Axes on ground
+    for _, tool in pairs(workspace:GetDescendants()) do
+        if isAxe(tool) and not tool.Parent:IsA("Backpack") and not tool.Parent:FindFirstChildWhichIsA("Humanoid") then
+            addESP(tool, false)
         end
     end
-end
-
--- Main ESP loop
-RunService.RenderStepped:Connect(function()
-    cleanupESP()
-
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if isAxe(obj) and not espData[obj] then
-            local part = getESPPart(obj)
-            if part then
-                local text = createESPText()
-                espData[obj] = {part = part, text = text}
+    -- Held axes
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player.Character then
+            for _, tool in pairs(player.Character:GetChildren()) do
+                if isAxe(tool) then
+                    addESP(tool, true)
+                end
             end
         end
     end
+end
 
-    for obj, data in pairs(espData) do
-        local part = data.part
-        if part and part:IsA("BasePart") and part:IsDescendantOf(Workspace) then
-            local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+-- ESP position updater
+runService.RenderStepped:Connect(function()
+    for i, v in pairs(espAxes) do
+        if v.Tool and v.Tool:FindFirstChild("Handle") and v.Tool.Handle:IsDescendantOf(workspace) then
+            local pos, onScreen = camera:WorldToViewportPoint(v.Tool.Handle.Position)
+            v.Text.Visible = onScreen
             if onScreen then
-                data.text.Position = Vector2.new(pos.X, pos.Y)
-                data.text.Text = obj.Name
-                data.text.Visible = true
-            else
-                data.text.Visible = false
+                v.Text.Position = Vector2.new(pos.X, pos.Y)
             end
         else
-            data.text.Visible = false
+            v.Text.Visible = false
         end
     end
 end)
+
+-- Refresh every 10 seconds
+updateAxes()
+while true do
+    task.wait(10)
+    updateAxes()
+end
