@@ -1,137 +1,110 @@
--- Lumber Tycoon 2 Axe ESP with Toggle UI (Delta Compatible)
+-- Delta UI Library
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/centersoftware/ui-libs/main/delta-lib.lua"))()
+local window = library:CreateWindow("Axe ESP")
+local toggleESP = false
+local uiVisible = true
 
--- SERVICES
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+-- ESP container
+local espFolder = Instance.new("Folder", game.CoreGui)
+espFolder.Name = "AxeESPFolder"
 
--- VARIABLES
-local ESP_ENABLED = false
-local axesESP = {}
-local toggleKey = Enum.KeyCode.RightControl -- Change key here if needed
+-- Create 2D ESP
+local function createESP(obj)
+    if espFolder:FindFirstChild(obj:GetFullName()) then return end
 
--- FUNCTION: Create 2D Label
-local function createLabel()
-    local label = Drawing.new("Text")
-    label.Size = 14
-    label.Center = true
-    label.Outline = true
-    label.OutlineColor = Color3.fromRGB(0, 0, 0)
-    label.Color = Color3.fromRGB(255, 255, 0)
-    label.Visible = false
-    return label
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = obj:GetFullName()
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 100, 0, 20)
+    billboard.StudsOffset = Vector3.new(0, 2, 0)
+    billboard.Adornee = obj
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1, 1, 0)
+    label.TextStrokeTransparency = 0.5
+    label.TextScaled = true
+    label.Font = Enum.Font.SourceSansBold
+    label.Text = obj.Name
+    label.Parent = billboard
+
+    billboard.Parent = espFolder
 end
 
--- FUNCTION: Check if part is on screen
-local function isOnScreen(position)
-    local screenPoint, onScreen = Camera:WorldToViewportPoint(position)
-    return onScreen, Vector2.new(screenPoint.X, screenPoint.Y)
-end
-
--- FUNCTION: Clear all ESP
+-- Clear all ESPs
 local function clearESP()
-    for _, v in pairs(axesESP) do
-        if v and v.Remove then
-            v:Remove()
-        end
+    for _, gui in pairs(espFolder:GetChildren()) do
+        gui:Destroy()
     end
-    table.clear(axesESP)
 end
 
--- FUNCTION: Scan for axes (held and dropped)
+-- Check if it's an axe
+local function isAxe(tool)
+    return tool:IsA("Tool") and tool:FindFirstChild("Handle") and (
+        string.find(tool.Name:lower(), "axe") or
+        string.find(tool.Name:lower(), "hatchet") or
+        string.find(tool.Name:lower(), "maul")
+    )
+end
+
+-- Scan for axes
 local function scanAxes()
     clearESP()
-    local function addESP(tool, name)
-        local label = createLabel()
-        axesESP[tool] = {
-            Tool = tool,
-            Label = label,
-            Name = name
-        }
-    end
-
-    -- Held axes
-    for _, player in pairs(Players:GetPlayers()) do
+    for _, player in pairs(game.Players:GetPlayers()) do
+        -- Held axes
         if player.Character then
             for _, item in pairs(player.Character:GetChildren()) do
-                if item:IsA("Tool") and item:FindFirstChild("ToolName") then
-                    addESP(item, item.ToolName.Value .. " (Held)")
+                if isAxe(item) and toggleESP then
+                    createESP(item)
+                end
+            end
+        end
+        -- Backpack axes
+        if player:FindFirstChild("Backpack") then
+            for _, tool in pairs(player.Backpack:GetChildren()) do
+                if isAxe(tool) and toggleESP then
+                    createESP(tool)
                 end
             end
         end
     end
-
     -- Dropped axes
-    for _, tool in pairs(workspace:GetDescendants()) do
-        if tool:IsA("Tool") and tool:FindFirstChild("ToolName") and not tool.Parent:IsA("Model") then
-            addESP(tool, tool.ToolName.Value)
+    for _, item in pairs(workspace:GetDescendants()) do
+        if isAxe(item) and toggleESP then
+            createESP(item)
         end
     end
 end
 
--- FUNCTION: Update ESP Labels
-RunService.RenderStepped:Connect(function()
-    if not ESP_ENABLED then
-        for _, v in pairs(axesESP) do
-            v.Label.Visible = false
-        end
-        return
-    end
-
-    for _, v in pairs(axesESP) do
-        local tool = v.Tool
-        local label = v.Label
-        local name = v.Name
-
-        if tool and tool:FindFirstChild("Handle") then
-            local onScreen, pos = isOnScreen(tool.Handle.Position)
-            if onScreen then
-                label.Text = name
-                label.Position = pos
-                label.Visible = true
-            else
-                label.Visible = false
-            end
+-- UI Toggle
+window:AddToggle({
+    text = "Enable Axe ESP",
+    callback = function(state)
+        toggleESP = state
+        if state then
+            scanAxes()
         else
-            label.Visible = false
+            clearESP()
         end
     end
-end)
+})
 
--- FUNCTION: Toggle ESP with UI Notification
-local function notifyToggle()
-    local toggleText = Drawing.new("Text")
-    toggleText.Size = 18
-    toggleText.Center = true
-    toggleText.Outline = true
-    toggleText.Color = ESP_ENABLED and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    toggleText.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2 - 100)
-    toggleText.Text = "Axe ESP " .. (ESP_ENABLED and "Enabled" or "Disabled")
-    toggleText.Visible = true
-    task.delay(1.5, function()
-        toggleText:Remove()
-    end)
-end
-
--- UI TOGGLE LISTENER
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == toggleKey then
-        ESP_ENABLED = not ESP_ENABLED
-        notifyToggle()
-    end
-end)
-
--- AUTO REFRESH AXES EVERY 10 SECONDS
+-- Loop to refresh every 10 sec
 task.spawn(function()
     while true do
-        if ESP_ENABLED then
-            pcall(scanAxes)
-        end
         task.wait(10)
+        if toggleESP then
+            scanAxes()
+        end
     end
 end)
 
--- Initial Scan
-pcall(scanAxes)
+-- Right Control to toggle UI visibility
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        uiVisible = not uiVisible
+        library:ToggleUI(uiVisible)
+    end
+end)
