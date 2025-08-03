@@ -1,110 +1,115 @@
--- Delta UI Library
-local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/centersoftware/ui-libs/main/delta-lib.lua"))()
-local window = library:CreateWindow("Axe ESP")
-local toggleESP = false
-local uiVisible = true
+--[[
+📌 Lumber Tycoon 2 - Axe ESP (2D Overlay)
+By ChatGPT | UI Toggle: Right Control
+Compatible with Delta
+--]]
 
--- ESP container
-local espFolder = Instance.new("Folder", game.CoreGui)
-espFolder.Name = "AxeESPFolder"
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
--- Create 2D ESP
-local function createESP(obj)
-    if espFolder:FindFirstChild(obj:GetFullName()) then return end
+local ESPEnabled = true
+local ESPObjects = {}
+local UpdateRate = 10 -- seconds
 
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = obj:GetFullName()
-    billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 100, 0, 20)
-    billboard.StudsOffset = Vector3.new(0, 2, 0)
-    billboard.Adornee = obj
+-- UI Toggle Setup
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.RightControl and not gp then
+        ESPEnabled = not ESPEnabled
+        for _, v in pairs(ESPObjects) do
+            v.Visible = ESPEnabled
+        end
+    end
+end)
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.new(1, 1, 0)
-    label.TextStrokeTransparency = 0.5
-    label.TextScaled = true
-    label.Font = Enum.Font.SourceSansBold
-    label.Text = obj.Name
-    label.Parent = billboard
-
-    billboard.Parent = espFolder
+-- Create ESP Box
+local function createESP(name)
+    local esp = Drawing.new("Text")
+    esp.Size = 16
+    esp.Center = true
+    esp.Outline = true
+    esp.Color = Color3.fromRGB(0, 255, 0)
+    esp.Visible = ESPEnabled
+    esp.Text = name
+    return esp
 end
 
--- Clear all ESPs
+-- Clear old ESP
 local function clearESP()
-    for _, gui in pairs(espFolder:GetChildren()) do
-        gui:Destroy()
+    for _, v in pairs(ESPObjects) do
+        if v and v.Remove then
+            v:Remove()
+        elseif v and v.Destroy then
+            v:Destroy()
+        end
     end
+    table.clear(ESPObjects)
 end
 
--- Check if it's an axe
-local function isAxe(tool)
-    return tool:IsA("Tool") and tool:FindFirstChild("Handle") and (
-        string.find(tool.Name:lower(), "axe") or
-        string.find(tool.Name:lower(), "hatchet") or
-        string.find(tool.Name:lower(), "maul")
-    )
+-- Update ESP targets
+local function getAllAxes()
+    local found = {}
+
+    -- World axes (not held)
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Tool") and v:FindFirstChild("Axe") then
+            table.insert(found, v)
+        end
+    end
+
+    -- Held axes
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local tool = plr.Character:FindFirstChildOfClass("Tool")
+            if tool and tool:FindFirstChild("Axe") then
+                table.insert(found, tool)
+            end
+        end
+    end
+
+    return found
 end
 
--- Scan for axes
-local function scanAxes()
+-- Track and update ESP
+local function updateESP()
     clearESP()
-    for _, player in pairs(game.Players:GetPlayers()) do
-        -- Held axes
-        if player.Character then
-            for _, item in pairs(player.Character:GetChildren()) do
-                if isAxe(item) and toggleESP then
-                    createESP(item)
-                end
-            end
-        end
-        -- Backpack axes
-        if player:FindFirstChild("Backpack") then
-            for _, tool in pairs(player.Backpack:GetChildren()) do
-                if isAxe(tool) and toggleESP then
-                    createESP(tool)
-                end
-            end
-        end
-    end
-    -- Dropped axes
-    for _, item in pairs(workspace:GetDescendants()) do
-        if isAxe(item) and toggleESP then
-            createESP(item)
-        end
+    local axes = getAllAxes()
+    for _, axe in pairs(axes) do
+        local esp = createESP(axe.Name)
+        ESPObjects[axe] = esp
     end
 end
 
--- UI Toggle
-window:AddToggle({
-    text = "Enable Axe ESP",
-    callback = function(state)
-        toggleESP = state
-        if state then
-            scanAxes()
+-- Position ESP every frame
+RunService.RenderStepped:Connect(function()
+    if not ESPEnabled then return end
+    for axe, esp in pairs(ESPObjects) do
+        if axe and axe:IsDescendantOf(game) and axe:FindFirstChild("Handle") then
+            local pos = axe.Handle.Position
+            local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(pos)
+            if onScreen then
+                esp.Position = Vector2.new(screenPos.X, screenPos.Y)
+                esp.Text = axe.Name
+                esp.Visible = true
+            else
+                esp.Visible = false
+            end
         else
-            clearESP()
+            esp.Visible = false
         end
     end
-})
+end)
 
--- Loop to refresh every 10 sec
+-- Initial run
+updateESP()
+
+-- Refresh every 10 seconds
 task.spawn(function()
     while true do
-        task.wait(10)
-        if toggleESP then
-            scanAxes()
-        end
+        task.wait(UpdateRate)
+        updateESP()
     end
 end)
 
--- Right Control to toggle UI visibility
-game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.RightControl then
-        uiVisible = not uiVisible
-        library:ToggleUI(uiVisible)
-    end
-end)
+print("✅ Axe ESP Script Loaded - Press Right Control to toggle")
