@@ -1,20 +1,23 @@
--- Axe Highlighter with Draggable GUI Toggle for Lumber Tycoon 2
-
 -- CONFIG
 local highlightColor = Color3.fromRGB(255, 0, 0)
 local transparency = 0.5
 local alwaysOnTop = true
 local checkInterval = 5
+local adornmentName = "AxeHighlight"
 
 -- STATE
 local highlightingEnabled = true
-local adornmentName = "AxeHighlight"
 
--- UI SETUP
+-- SERVICES
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- GUI SETUP
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "AxeHighlighterGUI"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Parent = ScreenGui
@@ -27,24 +30,59 @@ ToggleButton.Text = "Highlight: ON"
 ToggleButton.Font = Enum.Font.SourceSansBold
 ToggleButton.TextSize = 18
 ToggleButton.Active = true
-ToggleButton.Draggable = true -- Legacy drag (Delta supports this)
 
--- Toggle logic
+-- TOGGLE FUNCTIONALITY
 ToggleButton.MouseButton1Click:Connect(function()
     highlightingEnabled = not highlightingEnabled
     ToggleButton.Text = "Highlight: " .. (highlightingEnabled and "ON" or "OFF")
 
-    -- Remove highlights if disabling
     if not highlightingEnabled then
         for _, obj in pairs(game:GetDescendants()) do
-            if obj:IsA("Tool") and obj:FindFirstChild(adornmentName) then
-                obj[adornmentName]:Destroy()
+            local adorn = obj:FindFirstChild(adornmentName)
+            if adorn and adorn:IsA("BoxHandleAdornment") then
+                adorn:Destroy()
             end
         end
     end
 end)
 
--- Highlighting logic
+-- DRAGGING FUNCTIONALITY
+local dragging = false
+local dragInput, mousePos, framePos
+
+ToggleButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        mousePos = input.Position
+        framePos = ToggleButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ToggleButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - mousePos
+        ToggleButton.Position = UDim2.new(
+            framePos.X.Scale,
+            framePos.X.Offset + delta.X,
+            framePos.Y.Scale,
+            framePos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- HIGHLIGHT FUNCTION
 local function highlightAxe(axe)
     if not highlightingEnabled then return end
     if axe:IsA("Tool") and axe:FindFirstChild("Handle") and not axe:FindFirstChild(adornmentName) and axe.Name:lower():find("axe") then
@@ -60,7 +98,7 @@ local function highlightAxe(axe)
     end
 end
 
--- Scanner loop
+-- LOOP SCANNER
 task.spawn(function()
     while true do
         if highlightingEnabled then
@@ -75,5 +113,3 @@ task.spawn(function()
         task.wait(checkInterval)
     end
 end)
-
-print("✅ Axe Highlighter with draggable GUI toggle loaded.")
