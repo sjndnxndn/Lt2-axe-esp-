@@ -1,3 +1,11 @@
+-- Axe Highlighter with GUI Toggle + Drag + Accurate Detection
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+repeat wait() until LocalPlayer:FindFirstChild("PlayerGui")
+
 -- CONFIG
 local highlightColor = Color3.fromRGB(255, 0, 0)
 local transparency = 0.5
@@ -5,56 +13,47 @@ local alwaysOnTop = true
 local checkInterval = 5
 local adornmentName = "AxeHighlight"
 
--- STATE
 local highlightingEnabled = true
 
--- SERVICES
-local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
+-- GUI
+local gui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+gui.Name = "AxeHighlightGUI"
+gui.ResetOnSpawn = false
 
--- GUI SETUP
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "AxeHighlighterGUI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 140, 0, 40)
+button.Position = UDim2.new(0, 10, 0, 100)
+button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+button.BorderSizePixel = 0
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Font = Enum.Font.SourceSansBold
+button.TextSize = 18
+button.Text = "Highlight: ON"
+button.Parent = gui
 
-local ToggleButton = Instance.new("TextButton")
-ToggleButton.Parent = ScreenGui
-ToggleButton.Size = UDim2.new(0, 140, 0, 40)
-ToggleButton.Position = UDim2.new(0, 10, 0, 100)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-ToggleButton.BorderSizePixel = 0
-ToggleButton.TextColor3 = Color3.new(1, 1, 1)
-ToggleButton.Text = "Highlight: ON"
-ToggleButton.Font = Enum.Font.SourceSansBold
-ToggleButton.TextSize = 18
-ToggleButton.Active = true
-
--- TOGGLE FUNCTIONALITY
-ToggleButton.MouseButton1Click:Connect(function()
+-- Toggle Highlighting
+local function toggle()
     highlightingEnabled = not highlightingEnabled
-    ToggleButton.Text = "Highlight: " .. (highlightingEnabled and "ON" or "OFF")
+    button.Text = "Highlight: " .. (highlightingEnabled and "ON" or "OFF")
 
     if not highlightingEnabled then
         for _, obj in pairs(game:GetDescendants()) do
             local adorn = obj:FindFirstChild(adornmentName)
-            if adorn and adorn:IsA("BoxHandleAdornment") then
-                adorn:Destroy()
-            end
+            if adorn then adorn:Destroy() end
         end
     end
-end)
+end
 
--- DRAGGING FUNCTIONALITY
-local dragging = false
-local dragInput, mousePos, framePos
+button.MouseButton1Click:Connect(toggle)
 
-ToggleButton.InputBegan:Connect(function(input)
+-- Drag Handling
+local dragging, dragInput, startPos, startOffset
+
+button.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
-        mousePos = input.Position
-        framePos = ToggleButton.Position
+        startPos = input.Position
+        startOffset = button.Position
 
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
@@ -64,47 +63,54 @@ ToggleButton.InputBegan:Connect(function(input)
     end
 end)
 
-ToggleButton.InputChanged:Connect(function(input)
+button.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement then
         dragInput = input
     end
 end)
 
 UIS.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - mousePos
-        ToggleButton.Position = UDim2.new(
-            framePos.X.Scale,
-            framePos.X.Offset + delta.X,
-            framePos.Y.Scale,
-            framePos.Y.Offset + delta.Y
+    if dragging and input == dragInput then
+        local delta = input.Position - startPos
+        button.Position = UDim2.new(
+            startOffset.X.Scale,
+            startOffset.X.Offset + delta.X,
+            startOffset.Y.Scale,
+            startOffset.Y.Offset + delta.Y
         )
     end
 end)
 
--- HIGHLIGHT FUNCTION
-local function highlightAxe(axe)
+-- Axe Highlighter Function
+local function isAxe(tool)
+    if not tool:IsA("Tool") then return false end
+    if not tool:FindFirstChild("Handle") then return false end
+    local name = tool.Name:lower()
+    return name:find("axe") or name:find("birch") or name:find("silver") or name:find("end") or name:find("bees") or name:find("many")
+end
+
+local function highlightAxe(tool)
     if not highlightingEnabled then return end
-    if axe:IsA("Tool") and axe:FindFirstChild("Handle") and not axe:FindFirstChild(adornmentName) and axe.Name:lower():find("axe") then
-        local adornment = Instance.new("BoxHandleAdornment")
-        adornment.Name = adornmentName
-        adornment.Adornee = axe.Handle
-        adornment.Color3 = highlightColor
-        adornment.Transparency = transparency
-        adornment.AlwaysOnTop = alwaysOnTop
-        adornment.Size = axe.Handle.Size + Vector3.new(0.1, 0.1, 0.1)
-        adornment.ZIndex = 10
-        adornment.Parent = axe
+    if isAxe(tool) and not tool:FindFirstChild(adornmentName) then
+        local adorn = Instance.new("BoxHandleAdornment")
+        adorn.Name = adornmentName
+        adorn.Adornee = tool.Handle
+        adorn.Size = tool.Handle.Size + Vector3.new(0.1, 0.1, 0.1)
+        adorn.Color3 = highlightColor
+        adorn.Transparency = transparency
+        adorn.AlwaysOnTop = alwaysOnTop
+        adorn.ZIndex = 10
+        adorn.Parent = tool
     end
 end
 
--- LOOP SCANNER
+-- Scanner Loop
 task.spawn(function()
     while true do
         if highlightingEnabled then
             for _, obj in ipairs(game:GetDescendants()) do
                 pcall(function()
-                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") and obj.Name:lower():find("axe") then
+                    if obj:IsA("Tool") then
                         highlightAxe(obj)
                     end
                 end)
@@ -113,3 +119,5 @@ task.spawn(function()
         task.wait(checkInterval)
     end
 end)
+
+print("✅ Axe Highlighter is running.")
