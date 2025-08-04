@@ -1,113 +1,79 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/Dropulix/Delta/main/Library.lua"))()
-local Window = Delta:CreateWindow("LT2 Axe Highlighter")
-local Tab = Window:CreateTab("ESP")
-local ToggleESP = Tab:CreateToggle("Enable Axe ESP", false, function(value)
-    getgenv().AxeESPEnabled = value
-end)
+-- Axe Highlighter with Draggable GUI Toggle for Lumber Tycoon 2
 
---// Settings
-getgenv().AxeESPEnabled = true
-local RefreshKey = Enum.KeyCode.RightControl
-local AxeESP = {}
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+-- CONFIG
+local highlightColor = Color3.fromRGB(255, 0, 0)
+local transparency = 0.5
+local alwaysOnTop = true
+local checkInterval = 5
 
---// Cleanup function
-local function clearESP()
-    for _, v in pairs(AxeESP) do
-        if v.Text then v.Text:Remove() end
-    end
-    AxeESP = {}
-end
+-- STATE
+local highlightingEnabled = true
+local adornmentName = "AxeHighlight"
 
---// Create 2D label
-local function createESP(object)
-    local drawing = Drawing.new("Text")
-    drawing.Size = 14
-    drawing.Center = true
-    drawing.Outline = true
-    drawing.Color = Color3.fromRGB(255, 255, 0)
-    drawing.Visible = true
-    drawing.Text = object.Name
-    drawing.Font = 2
+-- UI SETUP
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AxeHighlighterGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
-    table.insert(AxeESP, {Object = object, Text = drawing})
-end
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Parent = ScreenGui
+ToggleButton.Size = UDim2.new(0, 140, 0, 40)
+ToggleButton.Position = UDim2.new(0, 10, 0, 100)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+ToggleButton.Text = "Highlight: ON"
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 18
+ToggleButton.Active = true
+ToggleButton.Draggable = true -- Legacy drag (Delta supports this)
 
---// Detect axes (Tools that contain "Axe" in name)
-local function isAxe(tool)
-    return tool:IsA("Tool") and string.find(tool.Name:lower(), "axe")
-end
+-- Toggle logic
+ToggleButton.MouseButton1Click:Connect(function()
+    highlightingEnabled = not highlightingEnabled
+    ToggleButton.Text = "Highlight: " .. (highlightingEnabled and "ON" or "OFF")
 
---// Scan for all axes in workspace and player inventory
-local function scanAxes()
-    clearESP()
-
-    -- Dropped axes in workspace
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if isAxe(obj) and not obj:FindFirstAncestorWhichIsA("Player") then
-            createESP(obj)
-        end
-    end
-
-    -- Held axes (player's backpack/tool)
-    for _, player in pairs(Players:GetPlayers()) do
-        local char = player.Character
-        if char then
-            for _, item in pairs(char:GetChildren()) do
-                if isAxe(item) then
-                    createESP(item)
-                end
+    -- Remove highlights if disabling
+    if not highlightingEnabled then
+        for _, obj in pairs(game:GetDescendants()) do
+            if obj:IsA("Tool") and obj:FindFirstChild(adornmentName) then
+                obj[adornmentName]:Destroy()
             end
-        end
-
-        local bp = player:FindFirstChildOfClass("Backpack")
-        if bp then
-            for _, item in pairs(bp:GetChildren()) do
-                if isAxe(item) then
-                    createESP(item)
-                end
-            end
-        end
-    end
-end
-
---// Keybind for refresh
-game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == RefreshKey then
-        scanAxes()
-    end
-end)
-
---// Main render loop
-RunService.RenderStepped:Connect(function()
-    if not getgenv().AxeESPEnabled then
-        for _, v in pairs(AxeESP) do
-            if v.Text then v.Text.Visible = false end
-        end
-        return
-    end
-
-    for i, v in pairs(AxeESP) do
-        local obj = v.Object
-        local text = v.Text
-
-        if obj and obj:IsDescendantOf(game) and obj:IsA("BasePart") then
-            local pos, onScreen = Camera:WorldToViewportPoint(obj.Position)
-            if onScreen then
-                text.Position = Vector2.new(pos.X, pos.Y)
-                text.Visible = true
-                text.Text = obj.Name
-            else
-                text.Visible = false
-            end
-        else
-            text.Visible = false
         end
     end
 end)
 
---// Initial scan
-scanAxes()
+-- Highlighting logic
+local function highlightAxe(axe)
+    if not highlightingEnabled then return end
+    if axe:IsA("Tool") and axe:FindFirstChild("Handle") and not axe:FindFirstChild(adornmentName) and axe.Name:lower():find("axe") then
+        local adornment = Instance.new("BoxHandleAdornment")
+        adornment.Name = adornmentName
+        adornment.Adornee = axe.Handle
+        adornment.Color3 = highlightColor
+        adornment.Transparency = transparency
+        adornment.AlwaysOnTop = alwaysOnTop
+        adornment.Size = axe.Handle.Size + Vector3.new(0.1, 0.1, 0.1)
+        adornment.ZIndex = 10
+        adornment.Parent = axe
+    end
+end
+
+-- Scanner loop
+task.spawn(function()
+    while true do
+        if highlightingEnabled then
+            for _, obj in ipairs(game:GetDescendants()) do
+                pcall(function()
+                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") and obj.Name:lower():find("axe") then
+                        highlightAxe(obj)
+                    end
+                end)
+            end
+        end
+        task.wait(checkInterval)
+    end
+end)
+
+print("✅ Axe Highlighter with draggable GUI toggle loaded.")
